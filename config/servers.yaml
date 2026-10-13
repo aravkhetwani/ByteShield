@@ -1,0 +1,12 @@
+# Upstream MCP servers ByteShield connects to (stdio transport).
+# {python} = the interpreter running the gateway, {root} = project root.
+servers:
+  - name: weather
+    command: "{python}"
+    args: ["{root}/demo_servers/weather_server.py"]
+  - name: poisoned
+    command: "{python}"
+    args: ["{root}/demo_servers/poisoned_server.py"]
+  - name: office
+    command: "{python}"
+    args: ["{root}/demo_servers/office_server.py"]
