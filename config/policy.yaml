@@ -1,0 +1,72 @@
+# ByteShield security policy.
+#
+# Every tool call gets a risk score (0-100) built from: tool base risk, tool-definition integrity,
+# confused-deputy provenance, argument rules, and the Isolation Forest anomaly score.
+# Score -> level (LOW / MEDIUM / HIGH) -> level_actions -> decision. The most severe signal wins.
+# Decisions: ALLOW < REQUIRE_APPROVAL < BLOCK.
+
+version: 1
+mode: enforce            # enforce | monitor (monitor logs verdicts but lets calls through - for rollout / demos)
+verify_on_call: true     # re-list the upstream tool definition and re-check its fingerprint before every call
+
+level_thresholds:
+  medium: 35
+  high: 70
+
+level_actions:
+  LOW: ALLOW
+  MEDIUM: ALLOW
+  HIGH: BLOCK
+
+untrusted_server_risk: 10   # extra risk for any tool exposed by an untrusted server
+
+poisoning:
+  block_score: 50            # tool definitions at/above this are quarantined on first sight
+  response_flag_score: 40    # tool outputs at/above this raise an alert and taint the session
+  response_action: FLAG      # FLAG = deliver but taint | WITHHOLD = replace the output with a notice
+  withhold_score: 70         # only used with WITHHOLD
+
+confused_deputy:
+  enabled: true
+  taint_ttl_seconds: 900
+  min_overlap_len: 12
+  entity_overlap_risk: 50
+  entity_overlap_action: BLOCK            # e-mail/URL/path in the args came from untrusted output
+  text_overlap_risk: 35
+  text_overlap_action: REQUIRE_APPROVAL   # args copy a long span of untrusted text
+  tainted_session_risk: 30
+  tainted_session_action: REQUIRE_APPROVAL
+
+anomaly:
+  enabled: true
+  max_risk_add: 30
+  privileged_action: REQUIRE_APPROVAL
+
+servers:
+  weather:  { trust: trusted }
+  office:   { trust: trusted }
+  poisoned: { trust: untrusted }
+default_server: { trust: untrusted }
+
+tools:
+  "weather.*":        { base_risk: 5,  privileged: false }
+  "poisoned.*":       { base_risk: 10, privileged: false }
+  "office.list_files": { base_risk: 20, privileged: true }
+  "office.read_file":  { base_risk: 30, privileged: true }
+  "office.send_email":
+    base_risk: 50
+    privileged: true
+    min_decision: REQUIRE_APPROVAL
+    allowed_recipient_domains: [corp.example]
+    external_recipient_risk: 20
+default_tool: { base_risk: 40, privileged: false }
+
+argument_rules:
+  - name: sensitive_path
+    pattern: '(\.ssh|id_rsa|id_ed25519|\.aws|\.gnupg|(^|[/\\])\.env\b|/etc/(passwd|shadow)|\.\.[/\\])'
+    risk_add: 80
+    action: BLOCK
+  - name: private_key_material
+    pattern: 'BEGIN [A-Z ]*PRIVATE KEY'
+    risk_add: 80
+    action: BLOCK
