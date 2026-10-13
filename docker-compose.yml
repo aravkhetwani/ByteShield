@@ -1,0 +1,27 @@
+# docker compose up --build            -> gateway + dashboard on http://localhost:8080
+# docker compose --profile demo run --rm attacks   -> run the automated attack demos
+services:
+  gateway:
+    build: .
+    ports:
+      - "127.0.0.1:8080:8080"        # bound to localhost only: the admin API can approve privileged calls
+    environment:
+      BYTESHIELD_DEMO: "1"
+      # BYTESHIELD_ADMIN_TOKEN: "change-me"   # require X-Admin-Token on /api/* (the dashboard will ask for it)
+    volumes:
+      - byteshield-data:/app/data
+
+  attacks:
+    build: .
+    profiles: ["demo"]
+    depends_on:
+      gateway:
+        condition: service_healthy
+    environment:
+      BYTESHIELD_DATA: /app/data
+    volumes:
+      - byteshield-data:/app/data   # shares the data dir so the rug-pull demo can flip its flag file
+    command: ["python", "-m", "demo.run_attacks", "--url", "http://gateway:8080", "--reset"]
+
+volumes:
+  byteshield-data:
